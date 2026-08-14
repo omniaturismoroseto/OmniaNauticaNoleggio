@@ -161,11 +161,31 @@
     cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;text-decoration:none;transition:background .15s;
   }
   .call-btn:hover{background:var(--teal);color:#fff;}
+  .edit-btn{
+    background:var(--sand);color:var(--navy);border:none;width:34px;height:34px;border-radius:50%;
+    cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:background .15s;
+  }
+  .edit-btn:hover{background:var(--teal-light);color:var(--teal);}
   .del-btn{
     background:none;border:none;color:var(--ink-soft);cursor:pointer;font-size:16px;width:28px;height:28px;
     border-radius:50%;display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s;
   }
   .del-btn:hover{background:var(--coral-light);color:var(--coral);}
+
+  .confirm-row{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    width:100%;font-size:13.5px;color:var(--ink);
+  }
+  .confirm-actions{display:flex;gap:8px;flex-shrink:0;}
+  .confirm-yes{
+    background:var(--coral);color:#fff;border:none;padding:7px 12px;border-radius:8px;
+    font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;
+  }
+  .confirm-yes:hover{background:#C85A3C;}
+  .confirm-no{
+    background:none;border:1.5px solid var(--line);color:var(--ink-soft);
+    padding:7px 12px;border-radius:8px;font-size:12.5px;font-weight:500;cursor:pointer;white-space:nowrap;
+  }
 
   .empty-state{text-align:center;padding:26px 10px;color:var(--ink-soft);font-size:14px;}
   .empty-state .icon{font-size:26px;margin-bottom:6px;}
@@ -183,7 +203,7 @@
   .turno-opt.pomeriggio.active{border-color:var(--teal);background:var(--teal-light);color:var(--teal);}
   .turno-opt.intera.active{border-color:var(--coral);background:var(--coral-light);color:var(--coral);}
   .turno-opt.disabled{opacity:.35;cursor:not-allowed;text-decoration:line-through;}
-  input[type=text], input[type=tel]{
+  input[type=text], input[type=tel], input[type=date]{
     width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:14px;
     font-family:'Work Sans',sans-serif;background:var(--foam);color:var(--ink);
   }
@@ -283,6 +303,7 @@ const GIORNI_LUNGHI = ['domenica','lunedì','martedì','mercoledì','giovedì','
 let current = new Date();
 current.setDate(1);
 let selectedDate = null;
+let pendingDeleteId = null;
 let bookings = {};
 let db = null;
 let dbReady = false;
@@ -422,6 +443,7 @@ function renderCalendar(){
 
 function selectDay(key){
   selectedDate = key;
+  pendingDeleteId = null;
   document.getElementById('formBox').style.display = 'none';
   document.getElementById('formBox').innerHTML = '';
   renderCalendar();
@@ -451,16 +473,42 @@ function renderPanel(){
     dayBookings.forEach(b=>{
       const row = document.createElement('div');
       row.className = 'booking';
-      row.innerHTML = `
-        <span class="badge ${b.turno}">${TURNI[b.turno].label}</span>
-        <div class="booking-info">
-          <div class="nome">${escapeHtml(b.nome)}</div>
-          <div class="tel">${escapeHtml(b.telefono)}</div>
-        </div>
-        <a class="call-btn" href="tel:${escapeAttr(b.telefono)}" aria-label="Chiama ${escapeAttr(b.nome)}">&#128222;</a>
-        <button class="del-btn" data-id="${b.id}" aria-label="Elimina prenotazione">&times;</button>
-      `;
-      row.querySelector('.del-btn').addEventListener('click', ()=>removeBooking(selectedDate, b));
+
+      if(pendingDeleteId === b.id){
+        row.innerHTML = `
+          <div class="confirm-row">
+            <span>Eliminare la prenotazione di <b>${escapeHtml(b.nome)}</b>?</span>
+            <div class="confirm-actions">
+              <button class="confirm-yes">Sì, elimina</button>
+              <button class="confirm-no">Annulla</button>
+            </div>
+          </div>
+        `;
+        row.querySelector('.confirm-yes').addEventListener('click', ()=>{
+          pendingDeleteId = null;
+          removeBooking(selectedDate, b);
+        });
+        row.querySelector('.confirm-no').addEventListener('click', ()=>{
+          pendingDeleteId = null;
+          renderPanel();
+        });
+      } else {
+        row.innerHTML = `
+          <span class="badge ${b.turno}">${TURNI[b.turno].label}</span>
+          <div class="booking-info">
+            <div class="nome">${escapeHtml(b.nome)}</div>
+            <div class="tel">${escapeHtml(b.telefono)}</div>
+          </div>
+          <a class="call-btn" href="tel:${escapeAttr(b.telefono)}" aria-label="Chiama ${escapeAttr(b.nome)}">&#128222;</a>
+          <button class="edit-btn" aria-label="Modifica prenotazione">&#9998;</button>
+          <button class="del-btn" aria-label="Elimina prenotazione">&times;</button>
+        `;
+        row.querySelector('.edit-btn').addEventListener('click', ()=>openEditForm(selectedDate, b));
+        row.querySelector('.del-btn').addEventListener('click', ()=>{
+          pendingDeleteId = b.id;
+          renderPanel();
+        });
+      }
       list.appendChild(row);
     });
   }
@@ -482,6 +530,142 @@ async function removeBooking(key, booking){
   }catch(e){
     setHint('Impossibile eliminare la prenotazione. Riprova.', true);
   }
+}
+
+function openEditForm(key, booking){
+  pendingDeleteId = null;
+  const box = document.getElementById('formBox');
+  let chosenTurno = booking.turno;
+
+  function computeAvail(targetKey){
+    const excludeId = targetKey === key ? booking.id : undefined;
+    return {
+      mattina: turnoDisponibile(targetKey,'mattina', excludeId),
+      pomeriggio: turnoDisponibile(targetKey,'pomeriggio', excludeId),
+      intera: turnoDisponibile(targetKey,'intera', excludeId)
+    };
+  }
+
+  function renderTurnoOptions(targetKey){
+    const avail = computeAvail(targetKey);
+    const keepsOriginalSlot = (targetKey === key);
+    if(!(keepsOriginalSlot && chosenTurno === booking.turno) && !avail[chosenTurno]){
+      chosenTurno = avail.mattina ? 'mattina' : (avail.pomeriggio ? 'pomeriggio' : (avail.intera ? 'intera' : null));
+    }
+    const wrap = document.getElementById('turnoOptionsEdit');
+    const isFree = (t)=> avail[t] || (keepsOriginalSlot && booking.turno === t);
+    wrap.innerHTML = `
+      <div class="turno-opt mattina ${!isFree('mattina')?'disabled':''}" data-turno="mattina">Mattina</div>
+      <div class="turno-opt pomeriggio ${!isFree('pomeriggio')?'disabled':''}" data-turno="pomeriggio">Pomeriggio</div>
+      <div class="turno-opt intera ${!isFree('intera')?'disabled':''}" data-turno="intera">Intera</div>
+    `;
+    const opts = wrap.querySelectorAll('.turno-opt');
+    opts.forEach(o=>{
+      if(o.classList.contains('disabled')) return;
+      if(o.dataset.turno===chosenTurno) o.classList.add('active');
+      o.addEventListener('click', ()=>{
+        opts.forEach(x=>x.classList.remove('active'));
+        o.classList.add('active');
+        chosenTurno = o.dataset.turno;
+      });
+    });
+  }
+
+  box.innerHTML = `
+    <div class="field">
+      <label>Giorno</label>
+      <input type="date" id="dateInputEdit" value="${key}">
+    </div>
+    <div class="field">
+      <label>Turno</label>
+      <div class="turno-options" id="turnoOptionsEdit"></div>
+    </div>
+    <div class="field">
+      <label>Nome cliente</label>
+      <input type="text" id="nomeInputEdit" value="${escapeHtml(booking.nome)}" maxlength="60">
+    </div>
+    <div class="field">
+      <label>Numero di telefono</label>
+      <input type="tel" id="telInputEdit" value="${escapeHtml(booking.telefono)}" maxlength="30">
+    </div>
+    <div id="formErrorEdit" class="error-msg" style="display:none;"></div>
+    <div class="form-actions">
+      <button class="save-btn" id="saveBtnEdit">Salva modifiche</button>
+      <button class="cancel-btn" id="cancelBtnEdit">Annulla</button>
+    </div>
+  `;
+  box.style.display = 'block';
+  renderTurnoOptions(key);
+
+  document.getElementById('dateInputEdit').addEventListener('change', (e)=>{
+    renderTurnoOptions(e.target.value);
+  });
+
+  document.getElementById('cancelBtnEdit').addEventListener('click', ()=>{
+    box.style.display='none';
+    box.innerHTML='';
+  });
+
+  document.getElementById('saveBtnEdit').addEventListener('click', async ()=>{
+    const newKey = document.getElementById('dateInputEdit').value;
+    const nome = document.getElementById('nomeInputEdit').value.trim();
+    const tel = document.getElementById('telInputEdit').value.trim();
+    const errEl = document.getElementById('formErrorEdit');
+    const saveBtn = document.getElementById('saveBtnEdit');
+
+    if(!newKey){
+      errEl.textContent = 'Seleziona un giorno valido.';
+      errEl.style.display = 'block';
+      return;
+    }
+    if(!chosenTurno){
+      errEl.textContent = 'Seleziona un turno disponibile.';
+      errEl.style.display = 'block';
+      return;
+    }
+    if(!nome){
+      errEl.textContent = 'Inserisci il nome del cliente.';
+      errEl.style.display = 'block';
+      return;
+    }
+    if(!tel || tel.replace(/[^0-9]/g,'').length < 6){
+      errEl.textContent = 'Inserisci un numero di telefono valido.';
+      errEl.style.display = 'block';
+      return;
+    }
+    const excludeId = newKey === key ? booking.id : undefined;
+    if(!turnoDisponibile(newKey, chosenTurno, excludeId)){
+      errEl.textContent = 'Questo turno non è più disponibile per il giorno scelto.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    const updated = { id: booking.id, turno: chosenTurno, nome: nome, telefono: tel };
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Salvataggio…';
+    try{
+      await db.collection('bookings').doc(key).update({
+        prenotazioni: firebase.firestore.FieldValue.arrayRemove(booking)
+      });
+      await db.collection('bookings').doc(newKey).set({
+        prenotazioni: firebase.firestore.FieldValue.arrayUnion(updated)
+      }, {merge:true});
+
+      box.style.display='none';
+      box.innerHTML='';
+      selectedDate = newKey;
+      const [yy,mm] = newKey.split('-').map(Number);
+      current = new Date(yy, mm-1, 1);
+      setHint('Prenotazione aggiornata.');
+      setTimeout(()=>setHint(''), 2500);
+    }catch(e){
+      errEl.textContent = 'Errore durante il salvataggio. Riprova.';
+      errEl.style.display = 'block';
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Salva modifiche';
+    }
+  });
 }
 
 function openForm(){
