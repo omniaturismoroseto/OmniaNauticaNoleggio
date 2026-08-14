@@ -463,25 +463,38 @@ function renderCalendar(){
   let startOffset = firstDay.getDay() - 1;
   if (startOffset < 0) startOffset = 6;
   const daysInMonth = new Date(y,m+1,0).getDate();
+  const isCurrentMonth = (y === new Date().getFullYear() && m === new Date().getMonth());
 
   const grid = document.getElementById('grid');
   grid.innerHTML = '';
 
+  const cells = [];
   for(let i=0;i<startOffset;i++){
-    const cell = document.createElement('div');
-    cell.className = 'day empty';
-    grid.appendChild(cell);
+    cells.push({ type:'offset' });
   }
-
   for(let d=1; d<=daysInMonth; d++){
     const key = dateKey(y,m,d);
-    const isCurrentMonth = (y === new Date().getFullYear() && m === new Date().getMonth());
-    if(isCurrentMonth && key < todayKey()){
+    const isPast = isCurrentMonth && key < todayKey();
+    cells.push({ type: isPast ? 'past' : 'day', key, d });
+  }
+
+  let firstKeepRow = 0;
+  for(let r=0; r*7 < cells.length; r++){
+    const row = cells.slice(r*7, r*7+7);
+    const hasKeepable = row.some(c => c.type === 'day');
+    if(hasKeepable){ firstKeepRow = r; break; }
+    firstKeepRow = r + 1;
+  }
+  const visibleCells = cells.slice(firstKeepRow * 7);
+
+  visibleCells.forEach(c=>{
+    if(c.type !== 'day'){
       const cell = document.createElement('div');
       cell.className = 'day empty';
       grid.appendChild(cell);
-      continue;
+      return;
     }
+    const key = c.key, d = c.d;
     const full = isDayFull(key);
     const cell = document.createElement('div');
     cell.className = 'day' + (full ? ' day-full' : '');
@@ -520,7 +533,7 @@ function renderCalendar(){
 
     cell.addEventListener('click', ()=>selectDay(key));
     grid.appendChild(cell);
-  }
+  });
 }
 
 function selectDay(key){
