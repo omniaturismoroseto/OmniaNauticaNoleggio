@@ -202,6 +202,24 @@
   .turno-opt.mattina.active{border-color:var(--gold);background:var(--gold-light);color:#7A5A0F;}
   .turno-opt.pomeriggio.active{border-color:var(--teal);background:var(--teal-light);color:var(--teal);}
   .turno-opt.intera.active{border-color:var(--coral);background:var(--coral-light);color:var(--coral);}
+  .occ-tag{
+    display:block;font-size:8.5px;font-weight:700;color:var(--coral);
+    text-transform:uppercase;letter-spacing:.3px;margin-top:2px;
+  }
+  .turno-warning{
+    margin-top:8px;padding:8px 10px;background:var(--coral-light);color:#8A2E17;
+    border-radius:8px;font-size:12px;line-height:1.5;
+  }
+  textarea{
+    width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:14px;
+    font-family:'Work Sans',sans-serif;background:var(--foam);color:var(--ink);
+    resize:vertical;min-height:56px;
+  }
+  textarea:focus{outline:none;border-color:var(--teal);}
+  .booking-info .nota{
+    font-size:12px;color:var(--ink-soft);margin-top:2px;font-style:italic;
+    overflow-wrap:break-word;
+  }
   .turno-opt.disabled{opacity:.35;cursor:not-allowed;text-decoration:line-through;}
   input[type=text], input[type=tel], input[type=date]{
     width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:14px;
@@ -364,12 +382,8 @@ function setHint(msg, isError){
   el.style.color = isError ? 'var(--coral)' : 'var(--ink-soft)';
 }
 
-function turnoDisponibile(key, turno, excludeId){
-  const arr = (bookings[key] || []).filter(b=>b.id !== excludeId);
-  const occ = arr.map(b=>b.turno);
-  if (occ.includes('intera')) return false;
-  if (turno === 'intera') return occ.length === 0;
-  return !occ.includes(turno);
+function turnoOccupato(key, turno, excludeId){
+  return (bookings[key] || []).some(b => b.id !== excludeId && b.turno === turno);
 }
 
 function isDayFull(key){
@@ -424,15 +438,14 @@ function renderCalendar(){
     const dayBookings = bookings[key] || [];
     const order = ['intera','mattina','pomeriggio'];
     order.forEach(t=>{
-      const b = dayBookings.find(x=>x.turno===t);
-      if(b){
+      dayBookings.filter(x=>x.turno===t).forEach(b=>{
         const f = document.createElement('div');
         f.className = 'flag ' + t;
         f.innerHTML = '<span class="dot"></span><span>' +
           (t==='intera' ? escapeHtml(b.nome) : TURNI[t].label.slice(0,3)+' · '+escapeHtml(b.nome)) +
           '</span>';
         flagsWrap.appendChild(f);
-      }
+      });
     });
     cell.appendChild(flagsWrap);
 
@@ -498,6 +511,7 @@ function renderPanel(){
           <div class="booking-info">
             <div class="nome">${escapeHtml(b.nome)}</div>
             <div class="tel">${escapeHtml(b.telefono)}</div>
+            ${b.nota ? `<div class="nota">${escapeHtml(b.nota)}</div>` : ''}
           </div>
           <a class="call-btn" href="tel:${escapeAttr(b.telefono)}" aria-label="Chiama ${escapeAttr(b.nome)}">&#128222;</a>
           <button class="edit-btn" aria-label="Modifica prenotazione">&#9998;</button>
@@ -537,38 +551,39 @@ function openEditForm(key, booking){
   const box = document.getElementById('formBox');
   let chosenTurno = booking.turno;
 
-  function computeAvail(targetKey){
+  function computeOcc(targetKey){
     const excludeId = targetKey === key ? booking.id : undefined;
     return {
-      mattina: turnoDisponibile(targetKey,'mattina', excludeId),
-      pomeriggio: turnoDisponibile(targetKey,'pomeriggio', excludeId),
-      intera: turnoDisponibile(targetKey,'intera', excludeId)
+      mattina: turnoOccupato(targetKey,'mattina', excludeId),
+      pomeriggio: turnoOccupato(targetKey,'pomeriggio', excludeId),
+      intera: turnoOccupato(targetKey,'intera', excludeId)
     };
   }
 
+  function updateWarningEdit(occ){
+    const warn = document.getElementById('turnoWarningEdit');
+    if(warn) warn.style.display = occ[chosenTurno] ? 'block' : 'none';
+  }
+
   function renderTurnoOptions(targetKey){
-    const avail = computeAvail(targetKey);
-    const keepsOriginalSlot = (targetKey === key);
-    if(!(keepsOriginalSlot && chosenTurno === booking.turno) && !avail[chosenTurno]){
-      chosenTurno = avail.mattina ? 'mattina' : (avail.pomeriggio ? 'pomeriggio' : (avail.intera ? 'intera' : null));
-    }
+    const occ = computeOcc(targetKey);
     const wrap = document.getElementById('turnoOptionsEdit');
-    const isFree = (t)=> avail[t] || (keepsOriginalSlot && booking.turno === t);
     wrap.innerHTML = `
-      <div class="turno-opt mattina ${!isFree('mattina')?'disabled':''}" data-turno="mattina">Mattina</div>
-      <div class="turno-opt pomeriggio ${!isFree('pomeriggio')?'disabled':''}" data-turno="pomeriggio">Pomeriggio</div>
-      <div class="turno-opt intera ${!isFree('intera')?'disabled':''}" data-turno="intera">Intera</div>
+      <div class="turno-opt mattina" data-turno="mattina">Mattina${occ.mattina?'<span class="occ-tag">occupato</span>':''}</div>
+      <div class="turno-opt pomeriggio" data-turno="pomeriggio">Pomeriggio${occ.pomeriggio?'<span class="occ-tag">occupato</span>':''}</div>
+      <div class="turno-opt intera" data-turno="intera">Intera${occ.intera?'<span class="occ-tag">occupato</span>':''}</div>
     `;
     const opts = wrap.querySelectorAll('.turno-opt');
     opts.forEach(o=>{
-      if(o.classList.contains('disabled')) return;
       if(o.dataset.turno===chosenTurno) o.classList.add('active');
       o.addEventListener('click', ()=>{
         opts.forEach(x=>x.classList.remove('active'));
         o.classList.add('active');
         chosenTurno = o.dataset.turno;
+        updateWarningEdit(occ);
       });
     });
+    updateWarningEdit(occ);
   }
 
   box.innerHTML = `
@@ -579,6 +594,7 @@ function openEditForm(key, booking){
     <div class="field">
       <label>Turno</label>
       <div class="turno-options" id="turnoOptionsEdit"></div>
+      <div class="turno-warning" id="turnoWarningEdit" style="display:none;">Turno già prenotato: questa sarà una prenotazione aggiuntiva (overbooking).</div>
     </div>
     <div class="field">
       <label>Nome cliente</label>
@@ -587,6 +603,10 @@ function openEditForm(key, booking){
     <div class="field">
       <label>Numero di telefono</label>
       <input type="tel" id="telInputEdit" value="${escapeHtml(booking.telefono)}" maxlength="30">
+    </div>
+    <div class="field">
+      <label>Note (opzionale)</label>
+      <textarea id="noteInputEdit" maxlength="200" placeholder="Es. arriva alle 9, porta salvagente bambino…">${escapeHtml(booking.nota || '')}</textarea>
     </div>
     <div id="formErrorEdit" class="error-msg" style="display:none;"></div>
     <div class="form-actions">
@@ -610,6 +630,7 @@ function openEditForm(key, booking){
     const newKey = document.getElementById('dateInputEdit').value;
     const nome = document.getElementById('nomeInputEdit').value.trim();
     const tel = document.getElementById('telInputEdit').value.trim();
+    const nota = document.getElementById('noteInputEdit').value.trim();
     const errEl = document.getElementById('formErrorEdit');
     const saveBtn = document.getElementById('saveBtnEdit');
 
@@ -619,7 +640,7 @@ function openEditForm(key, booking){
       return;
     }
     if(!chosenTurno){
-      errEl.textContent = 'Seleziona un turno disponibile.';
+      errEl.textContent = 'Seleziona un turno.';
       errEl.style.display = 'block';
       return;
     }
@@ -633,14 +654,8 @@ function openEditForm(key, booking){
       errEl.style.display = 'block';
       return;
     }
-    const excludeId = newKey === key ? booking.id : undefined;
-    if(!turnoDisponibile(newKey, chosenTurno, excludeId)){
-      errEl.textContent = 'Questo turno non è più disponibile per il giorno scelto.';
-      errEl.style.display = 'block';
-      return;
-    }
 
-    const updated = { id: booking.id, turno: chosenTurno, nome: nome, telefono: tel };
+    const updated = { id: booking.id, turno: chosenTurno, nome: nome, telefono: tel, nota: nota };
 
     saveBtn.disabled = true;
     saveBtn.textContent = 'Salvataggio…';
@@ -673,22 +688,22 @@ function openForm(){
   const box = document.getElementById('formBox');
   const key = selectedDate;
 
-  let chosenTurno = null;
-  const avail = {
-    mattina: turnoDisponibile(key,'mattina'),
-    pomeriggio: turnoDisponibile(key,'pomeriggio'),
-    intera: turnoDisponibile(key,'intera')
+  const occ = {
+    mattina: turnoOccupato(key,'mattina'),
+    pomeriggio: turnoOccupato(key,'pomeriggio'),
+    intera: turnoOccupato(key,'intera')
   };
-  chosenTurno = avail.mattina ? 'mattina' : (avail.pomeriggio ? 'pomeriggio' : (avail.intera ? 'intera' : null));
+  let chosenTurno = !occ.mattina ? 'mattina' : (!occ.pomeriggio ? 'pomeriggio' : (!occ.intera ? 'intera' : 'mattina'));
 
   box.innerHTML = `
     <div class="field">
       <label>Turno</label>
       <div class="turno-options" id="turnoOptions">
-        <div class="turno-opt mattina ${!avail.mattina?'disabled':''}" data-turno="mattina">Mattina</div>
-        <div class="turno-opt pomeriggio ${!avail.pomeriggio?'disabled':''}" data-turno="pomeriggio">Pomeriggio</div>
-        <div class="turno-opt intera ${!avail.intera?'disabled':''}" data-turno="intera">Intera</div>
+        <div class="turno-opt mattina" data-turno="mattina">Mattina${occ.mattina?'<span class="occ-tag">occupato</span>':''}</div>
+        <div class="turno-opt pomeriggio" data-turno="pomeriggio">Pomeriggio${occ.pomeriggio?'<span class="occ-tag">occupato</span>':''}</div>
+        <div class="turno-opt intera" data-turno="intera">Intera${occ.intera?'<span class="occ-tag">occupato</span>':''}</div>
       </div>
+      <div class="turno-warning" id="turnoWarning" style="display:none;">Turno già prenotato: questa sarà una prenotazione aggiuntiva (overbooking).</div>
     </div>
     <div class="field">
       <label>Nome cliente</label>
@@ -698,6 +713,10 @@ function openForm(){
       <label>Numero di telefono</label>
       <input type="tel" id="telInput" placeholder="Es. +39 333 1234567" maxlength="30">
     </div>
+    <div class="field">
+      <label>Note (opzionale)</label>
+      <textarea id="noteInput" maxlength="200" placeholder="Es. arriva alle 9, porta salvagente bambino…"></textarea>
+    </div>
     <div id="formError" class="error-msg" style="display:none;"></div>
     <div class="form-actions">
       <button class="save-btn" id="saveBtn">Salva prenotazione</button>
@@ -706,16 +725,21 @@ function openForm(){
   `;
   box.style.display = 'block';
 
+  function updateWarning(){
+    document.getElementById('turnoWarning').style.display = occ[chosenTurno] ? 'block' : 'none';
+  }
+
   const opts = box.querySelectorAll('.turno-opt');
   opts.forEach(o=>{
-    if(o.classList.contains('disabled')) return;
     if(o.dataset.turno===chosenTurno) o.classList.add('active');
     o.addEventListener('click', ()=>{
       opts.forEach(x=>x.classList.remove('active'));
       o.classList.add('active');
       chosenTurno = o.dataset.turno;
+      updateWarning();
     });
   });
+  updateWarning();
 
   document.getElementById('cancelBtn').addEventListener('click', ()=>{
     box.style.display='none';
@@ -725,11 +749,12 @@ function openForm(){
   document.getElementById('saveBtn').addEventListener('click', async ()=>{
     const nome = document.getElementById('nomeInput').value.trim();
     const tel = document.getElementById('telInput').value.trim();
+    const nota = document.getElementById('noteInput').value.trim();
     const errEl = document.getElementById('formError');
     const saveBtn = document.getElementById('saveBtn');
 
     if(!chosenTurno){
-      errEl.textContent = 'Seleziona un turno disponibile.';
+      errEl.textContent = 'Seleziona un turno.';
       errEl.style.display = 'block';
       return;
     }
@@ -743,17 +768,13 @@ function openForm(){
       errEl.style.display = 'block';
       return;
     }
-    if(!turnoDisponibile(key, chosenTurno)){
-      errEl.textContent = 'Questo turno non è più disponibile.';
-      errEl.style.display = 'block';
-      return;
-    }
 
     const booking = {
       id: 'b_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
       turno: chosenTurno,
       nome: nome,
-      telefono: tel
+      telefono: tel,
+      nota: nota
     };
 
     saveBtn.disabled = true;
@@ -775,21 +796,6 @@ function openForm(){
   });
 }
 
-document.getElementById('prevMonth').addEventListener('click', ()=>{
-  current.setMonth(current.getMonth()-1);
-  renderCalendar();
-});
-document.getElementById('nextMonth').addEventListener('click', ()=>{
-  current.setMonth(current.getMonth()+1);
-  renderCalendar();
-});
-document.getElementById('todayBtn').addEventListener('click', ()=>{
-  current = new Date();
-  current.setDate(1);
-  selectedDate = todayKey();
-  renderCalendar();
-  renderPanel();
-});
 document.getElementById('addBtn').addEventListener('click', openForm);
 
 selectedDate = todayKey();
