@@ -38,6 +38,7 @@
     --del-bg:#FDEAEA;
     --del-ink:#D93025;
     --note-dot:#9333EA;
+    --overbook-bg:#F4EBFC;
   }
   @media (prefers-color-scheme: dark){
     :root{
@@ -65,6 +66,7 @@
       --del-bg:#3A1414;
       --del-ink:#FF9A90;
       --note-dot:#C084FC;
+      --overbook-bg:#2A1B3D;
     }
   }
   *{box-sizing:border-box;}
@@ -211,7 +213,18 @@
   .add-btn:hover{background:var(--teal);}
   .add-btn:disabled{opacity:.5;cursor:not-allowed;}
 
-  .booking{display:flex;align-items:center;gap:10px;padding:12px 2px;border-top:1px solid var(--line-soft);flex-wrap:wrap;}
+  .booking{display:flex;align-items:center;gap:10px;padding:12px 10px 12px 12px;border-top:1px solid var(--line-soft);flex-wrap:wrap;border-radius:8px;}
+  .booking.overbooked{
+    background:var(--overbook-bg);
+    border:1.5px solid var(--note-dot);
+    border-top:1.5px solid var(--note-dot);
+    margin:4px 0;
+  }
+  .overbook-tag{
+    font-size:10px;font-weight:700;color:#fff;background:var(--note-dot);
+    padding:3px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.3px;
+    white-space:nowrap;flex-shrink:0;
+  }
   .booking:first-of-type{border-top:none;}
   .badge{font-size:11px;font-weight:600;color:#fff;padding:5px 10px;border-radius:14px;white-space:nowrap;flex-shrink:0;}
   .badge.mattina{background:var(--gold);color:#4A340C;}
@@ -598,7 +611,8 @@ function renderPanel(){
   } else {
     dayBookings.forEach(b=>{
       const row = document.createElement('div');
-      row.className = 'booking';
+      const isOverbooked = dayBookings.filter(x => x.turno === b.turno).length > 1;
+      row.className = 'booking' + (isOverbooked ? ' overbooked' : '');
 
       if(pendingDeleteId === b.id){
         row.innerHTML = `
@@ -621,6 +635,7 @@ function renderPanel(){
       } else {
         row.innerHTML = `
           <span class="badge ${b.turno}">${TURNI[b.turno].label}</span>
+          ${isOverbooked ? '<span class="overbook-tag">Overbooking</span>' : ''}
           <div class="booking-info">
             <div class="nome">${escapeHtml(b.nome)}</div>
             <div class="tel">${escapeHtml(b.telefono)}</div>
