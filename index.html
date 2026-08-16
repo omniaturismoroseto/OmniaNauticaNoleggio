@@ -490,6 +490,34 @@ function isDayFull(key){
   return occ.includes('mattina') && occ.includes('pomeriggio');
 }
 
+function computeOverbookedIds(key){
+  const arr = bookings[key] || [];
+  let mattinaRegular = false, pomeriggioRegular = false, interaRegular = false;
+  const overIds = new Set();
+  arr.forEach(b=>{
+    if(b.turno === 'intera'){
+      if(!mattinaRegular && !pomeriggioRegular && !interaRegular){
+        interaRegular = true;
+      } else {
+        overIds.add(b.id);
+      }
+    } else if(b.turno === 'mattina'){
+      if(!mattinaRegular && !interaRegular){
+        mattinaRegular = true;
+      } else {
+        overIds.add(b.id);
+      }
+    } else if(b.turno === 'pomeriggio'){
+      if(!pomeriggioRegular && !interaRegular){
+        pomeriggioRegular = true;
+      } else {
+        overIds.add(b.id);
+      }
+    }
+  });
+  return overIds;
+}
+
 function renderCalendar(){
   const y = current.getFullYear();
   const m = current.getMonth();
@@ -607,13 +635,14 @@ function renderPanel(){
     const order = {mattina:0,pomeriggio:1,intera:2};
     return order[a.turno]-order[b.turno];
   });
+  const overIds = computeOverbookedIds(selectedDate);
 
   if(dayBookings.length === 0){
     list.innerHTML = `<div class="empty-state"><div class="icon">&#9973;</div>Nessuna prenotazione per questo giorno.</div>`;
   } else {
     dayBookings.forEach(b=>{
       const row = document.createElement('div');
-      const isOverbooked = dayBookings.filter(x => x.turno === b.turno).length > 1;
+      const isOverbooked = overIds.has(b.id);
       row.className = 'booking' + (isOverbooked ? ' overbooked' : '');
 
       if(pendingDeleteId === b.id){
@@ -638,6 +667,7 @@ function renderPanel(){
         row.innerHTML = `
           <span class="badge ${b.turno}">${TURNI[b.turno].label}</span>
           ${isOverbooked ? '<span class="overbook-tag">Overbooking</span>' : ''}
+          ${(b.nota && b.nota.trim()) ? '<span class="note-dot" title="Prenotazione con nota"></span>' : ''}
           <div class="booking-info">
             <div class="nome">${escapeHtml(b.nome)}</div>
             <div class="tel">${escapeHtml(b.telefono)}</div>
