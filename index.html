@@ -38,7 +38,8 @@
     --del-bg:#FDEAEA;
     --del-ink:#D93025;
     --note-dot:#9333EA;
-    --overbook-bg:#F4EBFC;
+    --overbook:#DB2777;
+    --overbook-bg:#FCE7F3;
   }
   @media (prefers-color-scheme: dark){
     :root{
@@ -66,7 +67,8 @@
       --del-bg:#3A1414;
       --del-ink:#FF9A90;
       --note-dot:#C084FC;
-      --overbook-bg:#2A1B3D;
+      --overbook:#F472B6;
+      --overbook-bg:#3D1B2E;
     }
   }
   *{box-sizing:border-box;}
@@ -216,12 +218,12 @@
   .booking{display:flex;align-items:center;gap:10px;padding:12px 10px 12px 12px;border-top:1px solid var(--line-soft);flex-wrap:wrap;border-radius:8px;}
   .booking.overbooked{
     background:var(--overbook-bg);
-    border:1.5px solid var(--note-dot);
-    border-top:1.5px solid var(--note-dot);
+    border:1.5px solid var(--overbook);
+    border-top:1.5px solid var(--overbook);
     margin:4px 0;
   }
   .overbook-tag{
-    font-size:10px;font-weight:700;color:#fff;background:var(--note-dot);
+    font-size:10px;font-weight:700;color:#fff;background:var(--overbook);
     padding:3px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.3px;
     white-space:nowrap;flex-shrink:0;
   }
