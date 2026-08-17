@@ -126,6 +126,18 @@
   .brand span.tag{
     font-size:11px;color:var(--gold);text-transform:uppercase;letter-spacing:1.5px;font-weight:600;
   }
+  .trash-btn{
+    position:absolute;top:clamp(18px,5vw,28px);right:clamp(14px,4.5vw,24px);
+    background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:#fff;
+    width:clamp(32px,8vw,38px);height:clamp(32px,8vw,38px);border-radius:50%;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;transition:background .15s;
+  }
+  .trash-btn:hover{background:rgba(255,255,255,.18);}
+  .trash-count{
+    position:absolute;top:-3px;right:-3px;background:var(--coral);color:#fff;font-size:10px;font-weight:700;
+    min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+    padding:0 3px;line-height:1;
+  }
   .sub{color:#B9C8D0;font-size:13px;margin-top:4px;display:flex;align-items:center;gap:8px;}
   .sync-dot{width:8px;height:8px;border-radius:50%;background:#6FBF8C;display:inline-block;flex-shrink:0;}
   .sync-dot.off{background:#E76F51;}
@@ -290,6 +302,38 @@
   .empty-state{text-align:center;padding:26px 10px;color:var(--ink-soft);font-size:14px;}
   .empty-state .icon{font-size:26px;margin-bottom:6px;}
 
+  /* TRASH */
+  .trash-overlay{
+    display:none;position:fixed;inset:0;background:rgba(8,24,38,.55);z-index:50;
+    align-items:flex-start;justify-content:center;padding:8vh 14px 14px;overflow-y:auto;
+  }
+  .trash-overlay.open{display:flex;}
+  .trash-modal{
+    background:var(--card);border-radius:var(--radius);max-width:560px;width:100%;
+    padding:clamp(16px,4.5vw,22px);max-height:80vh;display:flex;flex-direction:column;
+  }
+  .trash-modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .trash-modal-head h2{font-family:'Fraunces', serif;font-size:18px;font-weight:600;margin:0;}
+  .trash-close-btn{background:none;border:none;font-size:24px;line-height:1;cursor:pointer;color:var(--ink-soft);padding:4px;}
+  .trash-modal-sub{font-size:12.5px;color:var(--ink-soft);margin:4px 0 12px;}
+  .trash-list{overflow-y:auto;}
+  .trash-item{display:flex;align-items:center;gap:10px;padding:10px 2px;border-top:1px solid var(--line-soft);flex-wrap:wrap;}
+  .trash-item:first-of-type{border-top:none;}
+  .trash-item-info{flex:1 1 140px;min-width:0;}
+  .trash-item-info .nome{font-weight:600;font-size:14px;}
+  .trash-item-info .meta{font-size:12px;color:var(--ink-soft);}
+  .trash-item-actions{display:flex;gap:6px;flex-shrink:0;align-items:center;}
+  .restore-btn{
+    background:var(--call-bg);color:var(--call-ink);border:none;padding:7px 12px;border-radius:14px;
+    font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:'Work Sans',sans-serif;
+  }
+  .restore-btn:hover{background:var(--call-ink);color:#fff;}
+  .trash-del-btn{
+    background:var(--del-bg);color:var(--del-ink);border:none;width:30px;height:30px;border-radius:50%;
+    cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .trash-del-btn:hover{background:var(--del-ink);color:#fff;}
+
   /* FORM */
   .form-box{margin-top:14px;padding-top:16px;border-top:1px dashed var(--line);}
   .field{margin-bottom:12px;}
@@ -351,6 +395,10 @@
         <span class="tag">Noleggio</span>
       </div>
     </div>
+    <button class="trash-btn" id="trashBtn" aria-label="Cestino: prenotazioni eliminate">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+      <span class="trash-count" id="trashCount" style="display:none;">0</span>
+    </button>
     <div class="sub"><span class="sync-dot off" id="syncDot"></span><span id="syncLabel">Connessione al database…</span></div>
     <div class="month-nav">
       <button id="prevMonth" aria-label="Mese precedente">&#8249;</button>
@@ -389,6 +437,17 @@
   <div class="hint" id="statusHint"></div>
 </div>
 
+<div class="trash-overlay" id="trashOverlay">
+  <div class="trash-modal">
+    <div class="trash-modal-head">
+      <h2>Cestino</h2>
+      <button class="trash-close-btn" id="trashCloseBtn" aria-label="Chiudi">&times;</button>
+    </div>
+    <div class="trash-modal-sub">Prenotazioni eliminate di recente. Puoi ripristinarle o rimuoverle definitivamente.</div>
+    <div class="trash-list" id="trashList"></div>
+  </div>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
@@ -423,6 +482,9 @@ let pendingDeleteId = null;
 let bookings = {};
 let db = null;
 let dbReady = false;
+let trashItems = [];
+let pendingTrashDeleteId = null;
+let trashUnavailable = false;
 
 function pad(n){return n<10?'0'+n:''+n;}
 function dateKey(y,m,d){return `${y}-${pad(m+1)}-${pad(d)}`;}
@@ -461,6 +523,18 @@ function initFirebase(){
       err => {
         setSync(false, 'Errore di connessione al database');
         setHint('Impossibile connettersi al database: controlla la configurazione e le regole di sicurezza Firestore.', true);
+      }
+    );
+    db.collection('trash').orderBy('deletedAt', 'desc').onSnapshot(
+      snapshot => {
+        trashItems = snapshot.docs.map(doc => ({ trashId: doc.id, ...doc.data() }));
+        trashUnavailable = false;
+        updateTrashCount();
+        renderTrash();
+      },
+      err => {
+        trashUnavailable = true;
+        renderTrash();
       }
     );
   }catch(e){
@@ -726,6 +800,17 @@ async function removeBooking(key, booking){
   if(!db){ setHint('Database non configurato.', true); return; }
   const sameSlot = (bookings[key] || []).filter(b => b.turno === booking.turno && b.id !== booking.id);
   try{
+    await db.collection('trash').doc(booking.id).set({
+      booking: booking,
+      originalKey: key,
+      deletedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    trashUnavailable = false;
+  }catch(e){
+    trashUnavailable = true;
+    renderTrash();
+  }
+  try{
     await db.collection('bookings').doc(key).update({
       prenotazioni: firebase.firestore.FieldValue.arrayRemove(booking)
     });
@@ -736,6 +821,132 @@ async function removeBooking(key, booking){
     setHint('Impossibile eliminare la prenotazione. Riprova.', true);
   }
 }
+
+async function restoreBooking(trashId){
+  const item = trashItems.find(t => t.trashId === trashId);
+  if(!item || !db) return;
+  try{
+    await db.collection('bookings').doc(item.originalKey).set({
+      prenotazioni: firebase.firestore.FieldValue.arrayUnion(item.booking)
+    }, {merge:true});
+    await db.collection('trash').doc(trashId).delete();
+    setHint('Prenotazione ripristinata.');
+    setTimeout(()=>setHint(''), 2500);
+  }catch(e){
+    setHint('Impossibile ripristinare la prenotazione. Riprova.', true);
+  }
+}
+
+async function purgeTrashItem(trashId){
+  if(!db) return;
+  try{
+    await db.collection('trash').doc(trashId).delete();
+  }catch(e){
+    setHint('Impossibile rimuovere l\'elemento dal cestino. Riprova.', true);
+  }
+}
+
+function updateTrashCount(){
+  const badge = document.getElementById('trashCount');
+  if(trashItems.length > 0){
+    badge.textContent = trashItems.length > 99 ? '99+' : trashItems.length;
+    badge.style.display = 'flex';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function openTrash(){
+  pendingTrashDeleteId = null;
+  document.getElementById('trashOverlay').classList.add('open');
+  renderTrash();
+}
+
+function closeTrash(){
+  pendingTrashDeleteId = null;
+  document.getElementById('trashOverlay').classList.remove('open');
+}
+
+function formatTrashDate(key){
+  const [y,m,d] = key.split('-').map(Number);
+  const dt = new Date(y, m-1, d);
+  return `${d} ${MESI[m-1]} ${y}`;
+}
+
+function formatDeletedAt(ts){
+  if(!ts || !ts.toDate) return '';
+  const dt = ts.toDate();
+  const pad2 = n => n<10?'0'+n:''+n;
+  return `${pad2(dt.getDate())}/${pad2(dt.getMonth()+1)}/${dt.getFullYear()} ${pad2(dt.getHours())}:${pad2(dt.getMinutes())}`;
+}
+
+function renderTrash(){
+  const overlay = document.getElementById('trashOverlay');
+  if(!overlay.classList.contains('open')) return;
+  const list = document.getElementById('trashList');
+  list.innerHTML = '';
+
+  if(trashUnavailable){
+    list.innerHTML = `<div class="empty-state"><div class="icon">&#9888;</div>Il cestino non è ancora attivo: le regole di sicurezza Firestore non permettono l'accesso alla collection "trash".<br><br>Aggiungi questa regola nella console Firebase (Firestore &rarr; Regole), accanto a quella già presente per "bookings":<br><br><code style="display:block;background:var(--sand);padding:8px 10px;border-radius:8px;font-size:11px;text-align:left;white-space:pre-wrap;">match /trash/{docId} {\n  allow read, write: if true;\n}</code></div>`;
+    return;
+  }
+
+  if(trashItems.length === 0){
+    list.innerHTML = `<div class="empty-state"><div class="icon">&#128465;</div>Il cestino è vuoto.</div>`;
+    return;
+  }
+
+  trashItems.forEach(item=>{
+    const b = item.booking;
+    const row = document.createElement('div');
+    row.className = 'trash-item';
+
+    if(pendingTrashDeleteId === item.trashId){
+      row.innerHTML = `
+        <div class="confirm-row">
+          <span>Eliminare definitivamente la prenotazione di <b>${escapeHtml(b.nome)}</b>?</span>
+          <div class="confirm-actions">
+            <button class="confirm-yes">Sì, elimina</button>
+            <button class="confirm-no">Annulla</button>
+          </div>
+        </div>
+      `;
+      row.querySelector('.confirm-yes').addEventListener('click', ()=>{
+        pendingTrashDeleteId = null;
+        purgeTrashItem(item.trashId);
+      });
+      row.querySelector('.confirm-no').addEventListener('click', ()=>{
+        pendingTrashDeleteId = null;
+        renderTrash();
+      });
+    } else {
+      row.innerHTML = `
+        <span class="badge ${b.turno}">${TURNI[b.turno].label}</span>
+        <div class="trash-item-info">
+          <div class="nome">${escapeHtml(b.nome)}</div>
+          <div class="meta">${escapeHtml(b.telefono)} · ${formatTrashDate(item.originalKey)}</div>
+          <div class="meta">Eliminata il ${formatDeletedAt(item.deletedAt)}</div>
+        </div>
+        <div class="trash-item-actions">
+          <button class="restore-btn">Ripristina</button>
+          <button class="trash-del-btn" aria-label="Elimina definitivamente"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button>
+        </div>
+      `;
+      row.querySelector('.restore-btn').addEventListener('click', ()=>restoreBooking(item.trashId));
+      row.querySelector('.trash-del-btn').addEventListener('click', ()=>{
+        pendingTrashDeleteId = item.trashId;
+        renderTrash();
+      });
+    }
+    list.appendChild(row);
+  });
+}
+
+document.getElementById('trashBtn').addEventListener('click', openTrash);
+document.getElementById('trashCloseBtn').addEventListener('click', closeTrash);
+document.getElementById('trashOverlay').addEventListener('click', (e)=>{
+  if(e.target.id === 'trashOverlay') closeTrash();
+});
 
 function openEditForm(key, booking){
   pendingDeleteId = null;
